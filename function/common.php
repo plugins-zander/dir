@@ -391,7 +391,8 @@ function needUpdate()
     $current_ver = substr($current_ver, strpos($current_ver, '.')+1);
     $current_ver = explode(urldecode('%0A'),$current_ver)[0];
     $current_ver = explode(urldecode('%0D'),$current_ver)[0];
-    $github_version = file_get_contents('https://raw.githubusercontent.com/qkqpttgf/OneManager-php/master/version');
+    $github_version = file_get_contents('https://cdn.jsdelivr.net/gh/qkqpttgf/OneManager-php@master/version');
+    //$github_version = file_get_contents('https://raw.githubusercontent.com/qkqpttgf/OneManager-php/master/version');
     $github_ver = substr($github_version, strpos($github_version, '.')+1);
     $github_ver = explode(urldecode('%0A'),$github_ver)[0];
     $github_ver = explode(urldecode('%0D'),$github_ver)[0];
@@ -489,7 +490,8 @@ function bigfileupload($path)
             $getoldupinfo = json_decode($getoldupinfo_j['body'], true);
             if ( json_decode( curl_request($getoldupinfo['uploadUrl'])['body'], true)['@odata.context']!='' ) return output($getoldupinfo_j['body'], $getoldupinfo_j['stat']);
         }
-        if (!$_SERVER['admin']) $filename = spurlencode( $fileinfo['name'] ) . '.scfupload';
+        if (!$_SERVER['admin']) $filename = spurlencode( $fileinfo['name'] );
+        //if (!$_SERVER['admin']) $filename = spurlencode( $fileinfo['name'] ) . '.scfupload';
         $response=MSAPI('createUploadSession',path_format($path1 . '/' . $filename),'{"item": { "@microsoft.graph.conflictBehavior": "fail"  }}',$_SERVER['access_token']);
         $responsearry = json_decode($response['body'],true);
         if (isset($responsearry['error'])) return output($response['body'], $response['stat']);

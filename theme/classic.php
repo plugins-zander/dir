@@ -995,7 +995,8 @@
 <?php if (!$_SERVER['admin']) { ?>
                                 var filemd5 = spark.end();
                                 var xhr4 = new XMLHttpRequest();
-                                xhr4.open("GET", '?action=uploaded_rename&filename='+encodeURIComponent(file.name)+'&filemd5='+filemd5);
+                                xhr4.open("GET", '?action=uploaded_rename&filename='+'&filemd5='+encodeURIComponent(file.name)+filemd5);
+                                //xhr4.open("GET", '?action=uploaded_rename&filename='+encodeURIComponent(file.name)+'&filemd5='+filemd5);
                                 xhr4.setRequestHeader('x-requested-with','XMLHttpRequest');
                                 xhr4.send(null);
                                 xhr4.onload = function(e){
