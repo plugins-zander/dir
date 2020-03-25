@@ -291,31 +291,32 @@ function encode_str_replace($str)
 function gethiddenpass($path,$passfile)
 {
     $path1 = path_format($_SERVER['list_path'] . path_format($path));
+    if ($path1!='/'&&substr($path1,-1)=='/') $path1=substr($path1,0,-1);
     $password=getcache('path_' . $path1 . '/?password');
     if ($password=='') {
-    $ispassfile = fetch_files(path_format($path . '/' . urlencode($passfile)));
-    //echo $path . '<pre>' . json_encode($ispassfile, JSON_PRETTY_PRINT) . '</pre>';
-    if (isset($ispassfile['file'])) {
-        $arr = curl_request($ispassfile['@microsoft.graph.downloadUrl']);
-        if ($arr['stat']==200) {
-            $passwordf=explode("\n",$arr['body']);
-            $password=$passwordf[0];
-            if ($password!='') $password=md5($password);
-            savecache('path_' . $path1 . '/?password', $password);
-            return $password;
+        $ispassfile = fetch_files(path_format($path . '/' . urlencode($passfile)));
+        //echo $path . '<pre>' . json_encode($ispassfile, JSON_PRETTY_PRINT) . '</pre>';
+        if (isset($ispassfile['file'])) {
+            $arr = curl_request($ispassfile['@microsoft.graph.downloadUrl']);
+            if ($arr['stat']==200) {
+                $passwordf=explode("\n",$arr['body']);
+                $password=$passwordf[0];
+                if ($password!='') $password=md5($password);
+                savecache('path_' . $path1 . '/?password', $password);
+                return $password;
+            } else {
+                //return md5('DefaultP@sswordWhenNetworkError');
+                return md5( md5(time()).rand(1000,9999) );
+            }
         } else {
-            //return md5('DefaultP@sswordWhenNetworkError');
-            return md5( md5(time()).rand(1000,9999) );
+            savecache('path_' . $path1 . '/?password', 'null');
+            if ($path !== '' ) {
+                $path = substr($path,0,strrpos($path,'/'));
+                return gethiddenpass($path,$passfile);
+            } else {
+                return '';
+            }
         }
-    } else {
-        savecache('path_' . $path1 . '/?password', 'null');
-        if ($path !== '' ) {
-            $path = substr($path,0,strrpos($path,'/'));
-            return gethiddenpass($path,$passfile);
-        } else {
-            return '';
-        }
-    }
     } elseif ($password==='null') {
         if ($path !== '' ) {
             $path = substr($path,0,strrpos($path,'/'));
@@ -456,7 +457,8 @@ function get_thumbnails_url($path = '/')
 {
     $path1 = path_format($path);
     $path = path_format($_SERVER['list_path'] . path_format($path));
-    $thumb_url = getcache($path);
+    if ($path!='/'&&substr($path,-1)=='/') $path=substr($path,0,-1);
+    $thumb_url = getcache('thumb_'.$path);
     if ($thumb_url!='') return output($thumb_url);
     $url = $_SERVER['api_url'];
     if ($path !== '/') {
@@ -466,7 +468,7 @@ function get_thumbnails_url($path = '/')
     $url .= ':/thumbnails/0/medium';
     $files = json_decode(curl_request($url, false, ['Authorization' => 'Bearer ' . $_SERVER['access_token']])['body'], true);
     if (isset($files['url'])) {
-        savecache($path, $files['url']);
+        savecache('thumb_'.$path, $files['url']);
         return output($files['url']);
     }
     return output('', 404);
@@ -515,7 +517,7 @@ function main($path)
     $disktags = explode("|",getConfig('disktag'));
 //    echo 'count$disk:'.count($disktags);
     if (count($disktags)>1) {
-        if ($path=='/'||$path=='') return output('', 302, [ 'Location' => path_format($_SERVER['base_path'].'/'.$disktags[0]) ]);
+        if ($path=='/'||$path=='') return output('', 302, [ 'Location' => path_format($_SERVER['base_path'].'/'.$disktags[0].'/') ]);
         $_SERVER['disktag'] = $path;
         $pos = strpos($path, '/');
         if ($pos>1) $_SERVER['disktag'] = substr($path, 0, $pos);
@@ -588,13 +590,13 @@ function main($path)
             if (time()>getConfig('token_expires')) setConfig([ 'refresh_token' => $ret['refresh_token'], 'token_expires' => time()+7*24*60*60 ]);
         }
 
-        $_SERVER['retry'] = 0;
         if ($_SERVER['ajax']) {
             if ($_GET['action']=='del_upload_cache'&&substr($_GET['filename'],-4)=='.tmp') {
                 // del '.tmp' without login. 无需登录即可删除.tmp后缀文件
                 error_log('del.tmp:GET,'.json_encode($_GET,JSON_PRETTY_PRINT));
                 $tmp = MSAPI('DELETE',path_format(path_format($_SERVER['list_path'] . path_format($path)) . '/' . spurlencode($_GET['filename']) ),'',$_SERVER['access_token']);
                 $path1 = path_format($_SERVER['list_path'] . path_format($path));
+                if ($path1!='/'&&substr($path1,-1)=='/') $path1=substr($path1,0,-1);
                 savecache('path_' . $path1, json_decode('{}',true), 1);
                 return output($tmp['body'],$tmp['stat']);
             }
@@ -608,8 +610,14 @@ function main($path)
                 $data = '{"name":"' . $_GET['filemd5'] . $ext . '"}';
                 //echo $oldname .'<br>'. $data;
                 $tmp = MSAPI('PATCH',$oldname,$data,$_SERVER['access_token']);
-                if ($tmp['stat']==409) MSAPI('DELETE',$oldname,'',$_SERVER['access_token'])['body'];
+                if ($tmp['stat']==409) {
+                    MSAPI('DELETE',$oldname,'',$_SERVER['access_token']);
+                    $tmpbody = json_decode($tmp['body'], true);
+                    $tmpbody['name'] = $_GET['filemd5'] . $ext;
+                    $tmp['body'] = json_encode($tmpbody);
+                }
                 $path1 = path_format($_SERVER['list_path'] . path_format($path));
+                if ($path1!='/'&&substr($path1,-1)=='/') $path1=substr($path1,0,-1);
                 savecache('path_' . $path1, json_decode('{}',true), 1);
                 return output($tmp['body'],$tmp['stat']);
             }
@@ -619,6 +627,7 @@ function main($path)
             $tmp = adminoperate($path);
             if ($tmp['statusCode'] > 0) {
                 $path1 = path_format($_SERVER['list_path'] . path_format($path));
+                if ($path1!='/'&&substr($path1,-1)=='/') $path1=substr($path1,0,-1);
                 savecache('path_' . $path1, json_decode('{}',true), 1);
                 return $tmp;
             }
@@ -656,7 +665,12 @@ function main($path)
         if ( isset($files['folder']) || isset($files['file']) ) {
             return render_list($path, $files);
         } else {
-            return message('<a href="'.$_SERVER['base_path'].'">'.getconstStr('Back').getconstStr('Home').'</a><div style="margin:8px;">' . $files['error']['message'] . '</div><a href="javascript:history.back(-1)">'.getconstStr('Back').'</a>', $files['error']['code'], $files['error']['stat']);
+            if (!isset($files['error'])) {
+                $files['error']['message'] = json_encode($files, JSON_PRETTY_PRINT);
+                $files['error']['code'] = 'unknownError';
+                $files['error']['stat'] = 500;
+            }
+            return message('<a href="'.$_SERVER['base_path'].'">'.getconstStr('Back').getconstStr('Home').'</a><div style="margin:8px;"><pre>' . $files['error']['message'] . '</pre></div><a href="javascript:history.back(-1)">'.getconstStr('Back').'</a>', $files['error']['code'], $files['error']['stat']);
         }
     }
 }
@@ -673,15 +687,6 @@ function list_files($path)
         $files = fetch_files($path);
     }
     return $files;
-    /*if ( isset($files['folder']) || isset($files['file']) || isset($files['error']) ) {
-        return $files;
-    } else {
-        error_log( json_encode($files) . ' Network Error<br>' );
-        $_SERVER['retry']++;
-        if ($_SERVER['retry'] < 3) {
-            return list_files($path);
-        } else return $files;
-    }*/
 }
 
 function adminform($name = '', $pass = '', $path = '')
@@ -749,6 +754,7 @@ function adminoperate($path)
                 //echo $foldername;
         $result = MSAPI('PUT', $filename, $_GET['encrypt_newpass'], $_SERVER['access_token']);
         $path1 = path_format($path1 . '/' . $foldername );
+        if ($path1!='/'&&substr($path1,-1)=='/') $path1=substr($path1,0,-1);
         savecache('path_' . $path1 . '/?password', '', 1);
         return output($result['body'], $result['stat']);
     }
@@ -766,6 +772,7 @@ function adminoperate($path)
             //savecache('path_' . $path1, json_decode('{}',true), 1);
             if ($_GET['move_folder'] == '/../') $path2 = path_format( substr($path1, 0, strrpos($path1, '/')) . '/' );
             else $path2 = path_format( $path1 . '/' . $_GET['move_folder'] . '/' );
+            if ($path2!='/'&&substr($path2,-1)=='/') $path2=substr($path2,0,-1);
             savecache('path_' . $path2, json_decode('{}',true), 1);
             return output($result['body'], $result['stat']);
         } else {
@@ -806,7 +813,7 @@ function adminoperate($path)
             //if ($_GET['move_folder'] == '/../') $path2 = path_format( substr($path1, 0, strrpos($path1, '/')) . '/' );
             //else $path2 = path_format( $path1 . '/' . $_GET['move_folder'] . '/' );
             //savecache('path_' . $path2, json_decode('{}',true), 1);
-        return output($result['body'].json_encode($result['Location']), $result['stat']);
+        return output($result['body'], $result['stat']);
     }
     if (isset($_POST['editfile'])) {
         // edit 编辑
@@ -837,6 +844,7 @@ function adminoperate($path)
     }
     if (isset($_GET['RefreshCache'])) {
         $path1 = path_format($_SERVER['list_path'] . path_format($path));
+        if ($path1!='/'&&substr($path1,-1)=='/') $path1=substr($path1,0,-1);
         savecache('path_' . $path1 . '/?password', '', 1);
         return message('<meta http-equiv="refresh" content="2;URL=./">', getconstStr('RefreshCache'), 302);
     }
@@ -854,7 +862,7 @@ function splitlast($str, $split)
         $tmp[1] = substr($str, $pos+1);
     } else {
         $tmp[0] = '';
-        $tmp[1] = $str;
+        $tmp[1] = substr($str, 1);
     }
     return $tmp;
 }
@@ -929,28 +937,39 @@ function MSAPI($method, $path, $data = '', $access_token)
 
 function fetch_files($path = '/')
 {
+    global $exts;
     $path1 = path_format($path);
     $path = path_format($_SERVER['list_path'] . path_format($path));
+    if ($path!='/'&&substr($path,-1)=='/') $path=substr($path,0,-1);
     if (!($files = getcache('path_' . $path))) {
         // https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
         // https://docs.microsoft.com/zh-cn/graph/api/driveitem-put-content?view=graph-rest-1.0&tabs=http
         // https://developer.microsoft.com/zh-cn/graph/graph-explorer
-        $pos = strrpos($path, '/');
-        if ($pos>1) {
-            $parentpath = substr($path, 0, $pos);
-            $filename = substr($path, $pos+1);
-            if ($parentfiles = getcache('path_' . $parentpath))
-                foreach ($parentfiles['children'] as $file)
-                    if ($file['name']==$filename)
-                        if (isset($file['@microsoft.graph.downloadUrl']))
-                            return $file;
+        $pos = splitlast($path, '/');
+        $parentpath = $pos[0];
+        if ($parentpath=='') $parentpath = '/';
+        $filename = $pos[1];
+        if ($parentfiles = getcache('path_' . $parentpath)) {
+            if (isset($parentfiles['children'][$filename]['@microsoft.graph.downloadUrl'])) {
+                if (in_array(splitlast($filename,'.')[1], $exts['txt'])) {
+                    if (!(isset($parentfiles['children'][$filename]['content'])&&$parentfiles['children'][$filename]['content']['stat']==200)) {
+                        $content1 = curl_request($parentfiles['children'][$filename]['@microsoft.graph.downloadUrl']);
+                        $parentfiles['children'][$filename]['content'] = $content1;
+                        savecache('path_' . $parentpath, $parentfiles);
+                    }
+                }
+                return $parentfiles['children'][$filename];
+            }
         }
+
         $url = $_SERVER['api_url'];
         if ($path !== '/') {
             $url .= ':' . $path;
             if (substr($url,-1)=='/') $url=substr($url,0,-1);
         }
         $url .= '?expand=children(select=name,size,file,folder,parentReference,lastModifiedDateTime,@microsoft.graph.downloadUrl)';
+        $retry = 0;
+        $arr = [];
         while ($retry<3&&!$arr['stat']) {
             $arr = curl_request($url, false, ['Authorization' => 'Bearer ' . $_SERVER['access_token']]);
             $retry++;
@@ -997,7 +1016,7 @@ function children_name($children)
 {
     $tmp = [];
     foreach ($children as $file) {
-        $tmp[$file['name']] = $file;
+        $tmp[strtolower($file['name'])] = $file;
     }
     return $tmp;
 }
@@ -1006,6 +1025,7 @@ function fetch_files_children($files, $path, $page)
 {
     $path1 = path_format($path);
     $path = path_format($_SERVER['list_path'] . path_format($path));
+    if ($path!='/'&&substr($path,-1)=='/') $path=substr($path,0,-1);
     $cachefilename = '.SCFcache_'.$_SERVER['function_name'];
     $maxpage = ceil($files['folder']['childCount']/200);
     if (!($files['children'] = getcache('files_' . $path . '_page_' . $page))) {
@@ -1110,6 +1130,10 @@ function render_list($path = '', $files = '')
     global $exts;
     global $constStr;
 
+    if (isset($files['children']['index.html']) && !$_SERVER['admin']) {
+        $htmlcontent = fetch_files(spurlencode(path_format($path . '/index.html'),'/'))['content'];
+        return output($htmlcontent['body'], $htmlcontent['stat']);
+    }
     $path = str_replace('%20','%2520',$path);
     $path = str_replace('+','%2B',$path);
     $path = str_replace('&','&amp;',path_format(urldecode($path))) ;
@@ -1142,12 +1166,12 @@ function render_list($path = '', $files = '')
 
     $theme = getConfig('theme');
     if ( $theme=='' || !file_exists('theme/'.$theme) ) $theme = 'classic.php';
-    $htmlpage = include 'theme/'.$theme;
+    include 'theme/'.$theme;
 
     $html = '<!--
     Github ： https://github.com/qkqpttgf/OneManager-php
 -->' . ob_get_clean();
-    if (isset($htmlpage['statusCode'])) return $htmlpage;
+    //if (isset($htmlpage['statusCode'])) return $htmlpage;
     if (isset($_SERVER['Set-Cookie'])) return output($html, $statusCode, [ 'Set-Cookie' => $_SERVER['Set-Cookie'], 'Content-Type' => 'text/html' ]);
     return output($html,$statusCode);
 }
@@ -1190,7 +1214,6 @@ function get_refresh_token()
         //return message('<pre>' . json_encode($ret, JSON_PRETTY_PRINT) . '</pre>', 500);
     }
     if (isset($_GET['install1'])) {
-        $_SERVER['disk_oprating'] = $_COOKIE['disktag'];
         $_SERVER['disktag'] = $_COOKIE['disktag'];
         config_oauth();
         if (getConfig('Onedrive_ver')=='MS' || getConfig('Onedrive_ver')=='CN' || getConfig('Onedrive_ver')=='MSC') {
@@ -1222,11 +1245,12 @@ function get_refresh_token()
                 $tmp['client_secret'] = $_POST['client_secret'];
             }
             $response = setConfigResponse( setConfig($tmp, $_COOKIE['disktag']) );
-            $title = getconstStr('MayinEnv');
-            $html = getconstStr('Wait') . ' 3s<meta http-equiv="refresh" content="3;URL=' . $url . '?AddDisk&install1">';
             if (api_error($response)) {
                 $html = api_error_msg($response);
                 $title = 'Error';
+            } else {
+                $title = getconstStr('MayinEnv');
+                $html = getconstStr('Wait') . ' 3s<meta http-equiv="refresh" content="3;URL=' . $url . '?AddDisk&install1">';
             }
             return message($html, $title, 201);
         }
@@ -1243,8 +1267,8 @@ function get_refresh_token()
         '.getconstStr('OnedriveDiskTag').': ('.getConfig('disktag').')<input type="text" name="disktag_add" placeholder="' . getconstStr('EnvironmentsDescription')['disktag'] . '" style="width:100%"><br>
         '.getconstStr('OnedriveDiskName').':<input type="text" name="diskname" placeholder="' . getconstStr('EnvironmentsDescription')['diskname'] . '" style="width:100%"><br>
         Onedrive_Ver：<br>
-        <label><input type="radio" name="Onedrive_ver" value="MS" checked>MS: '.getconstStr('OndriveVerMS').'</label><br>
-        <label><input type="radio" name="Onedrive_ver" value="CN">CN: '.getconstStr('OndriveVerCN').'</label><br>
+        <label><input type="radio" name="Onedrive_ver" value="MS" checked onclick="document.getElementById(\'secret\').style.display=\'none\';">MS: '.getconstStr('OndriveVerMS').'</label><br>
+        <label><input type="radio" name="Onedrive_ver" value="CN" onclick="document.getElementById(\'secret\').style.display=\'none\';">CN: '.getconstStr('OndriveVerCN').'</label><br>
         <label><input type="radio" name="Onedrive_ver" value="MSC" onclick="document.getElementById(\'secret\').style.display=\'\';">MSC: '.getconstStr('OndriveVerMSC').'
             <div id="secret" style="display:none">
                 <a href="'.$app_url.'" target="_blank">'.getconstStr('GetSecretIDandKEY').'</a><br>
