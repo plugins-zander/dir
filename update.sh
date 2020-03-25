@@ -1,6 +1,6 @@
 #!bash
 
-gitsource='https://github.com/qkqpttgf/OneManager-php'
+gitsource='-b paper-upload https://github.com/plugins-zander/OneManager'
 
 OneManagerPath=`cd $(dirname $0);pwd -P`
 cd ${OneManagerPath}
