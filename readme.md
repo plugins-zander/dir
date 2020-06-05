@@ -4,7 +4,7 @@ Install program first, then add onedrive in setup after login.
 # Deploy to heroku  
 Official: https://heroku.com  
 
-How to Install: Click the button [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy) to Deploy a new app, or create an app then deploy via connect to your github fork.  
+How to Install: Click the button [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/qkqpttgf/OneManager-php) to Deploy a new app, or create an app then deploy via connect to your github fork.  
 
 DEMO:  https://herooneindex.herokuapp.com/  
 
@@ -49,5 +49,5 @@ If there is 'index.html' file, program will only show the content of 'index.html
 Click 'EditTime' or 'Size', the list will sort by time or size, Click 'File' can resume sort.  
 点击“时间”、“大小”，可以排序显示，点“文件”恢复原样。  
 
-QQ Group: 943919989  
+QQ Group: 943919989 (请看完上面的中英双语再加群，谢谢！)  
 Telegram Group: https://t.me/joinchat/I_RVc0bqxuxlT-d0cO7ozw  

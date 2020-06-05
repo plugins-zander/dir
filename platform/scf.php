@@ -28,6 +28,7 @@ function GetGlobalVariable($event)
 
 function GetPathSetting($event, $context)
 {
+    $_SERVER['firstacceptlanguage'] = strtolower(splitfirst(splitfirst($event['headers']['accept-language'],';')[0],',')[0]);
     $_SERVER['function_name'] = $context['function_name'];
     $_SERVER['namespace'] = $context['namespace'];
     $host_name = $event['headers']['host'];
@@ -131,14 +132,16 @@ function install()
         $tmp['admin'] = $_POST['admin'];
         setConfig($tmp);
         if (needUpdate()) {
-            updateProgram($_SERVER['function_name'], $_SERVER['Region'], $_SERVER['namespace'], $SecretId, $SecretKey);
+            OnekeyUpate();
             return message('update to github version, reinstall.<script>document.cookie=\'language=; path=/\';</script><meta http-equiv="refresh" content="3;URL=' . $url . '">', 'Program updating', 201);
         }
         return output('Jump<script>document.cookie=\'language=; path=/\';</script><meta http-equiv="refresh" content="3;URL=' . path_format($_SERVER['base_path'] . '/') . '">', 302);
     }
     if ($_GET['install1']) {
         //if ($_POST['admin']!='') {
-            $tmp['language'] = $_POST['language'];
+            //$tmp['language'] = $_POST['language'];
+            $tmp['Region'] = $_POST['Region'];
+            $tmp['timezone'] = $_COOKIE['timezone'];
             $SecretId = getConfig('SecretId');
             if ($SecretId=='') {
                 $SecretId = $_POST['SecretId'];
@@ -149,11 +152,9 @@ function install()
                 $SecretKey = $_POST['SecretKey'];
                 $tmp['SecretKey'] = $SecretKey;
             }
-            $response = json_decode(SetbaseConfig($tmp, $_SERVER['function_name'], $_SERVER['Region'], $_SERVER['namespace'], $SecretId, $SecretKey), true)['Response'];
+            $response = json_decode(SetbaseConfig($tmp, $_SERVER['function_name'], $_POST['Region'], $_SERVER['namespace'], $SecretId, $SecretKey), true)['Response'];
             if (api_error($response)) {
                 $html = api_error_msg($response);
-                $html .= '<br>
-<button onclick="location.href = location.href;">'.getconstStr('Refresh').'</button>';
                 $title = 'Error';
                 return message($html, $title, 201);
             } else {
@@ -190,9 +191,30 @@ language:<br>';
         <label>SecretId:<input name="SecretId" type="text" placeholder="" size=""></label><br>
         <label>SecretKey:<input name="SecretKey" type="text" placeholder="" size=""></label><br>';
         $html .= '
+        <select class="changelanguage" name="Region">
+            <option value="">选择区域</option>
+            <option value="ap-beijing">华北地区(北京)</option>
+            <option value="ap-chengdu">西南地区(成都)</option>
+            <option value="ap-guangzhou">华南地区(广州)</option>
+            <option value="ap-guangzhou-open">华南地区(广州Open)</option>
+            <option value="ap-hongkong">港澳台地区(中国香港)</option>
+            <option value="ap-mumbai">亚太南部(孟买)</option>
+            <option value="ap-shanghai">华东地区(上海)</option>
+            <option value="ap-shanghai-fsi">华东地区(上海金融)</option>
+            <option value="ap-singapore">亚太东南(新加坡)</option>
+            <option value="ap-tokyo">亚太东北(东京)</option>
+            <option value="na-siliconvalley">美国西部(硅谷)</option>
+            <option value="na-toronto">北美地区(多伦多)</option>
+        </select>（腾讯几个月了还不做出来，只能先弄选择了）<br>
         <input type="submit" value="'.getconstStr('Submit').'">
     </form>
     <script>
+        var nowtime= new Date();
+        var timezone = 0-nowtime.getTimezoneOffset()/60;
+        var expd = new Date();
+        expd.setTime(expd.getTime()+(2*60*60*1000));
+        var expires = "expires="+expd.toGMTString();
+        document.cookie="timezone="+timezone+"; path=/; "+expires;
         function changelanguage(str)
         {
             document.cookie=\'language=\'+str+\'; path=/\';
@@ -355,13 +377,14 @@ function SetbaseConfig($Envs, $function_name, $Region, $Namespace, $SecretId, $S
     return post2url('https://'.$host, $data.'&Signature='.urlencode($signStr));
 }
 
-function updateProgram($function_name, $Region, $Namespace, $SecretId, $SecretKey)
+function updateProgram($function_name, $Region, $Namespace, $SecretId, $SecretKey, $source)
 {
     WaitSCFStat();
     $meth = 'POST';
     $host = 'scf.tencentcloudapi.com';
     $tmpdata['Action'] = 'UpdateFunctionCode';
-    $tmpdata['Code.GitUrl'] = 'https://github.com/qkqpttgf/OneManager-php';
+    $tmpdata['Code.GitUrl'] = $source['url'];
+    $tmpdata['Code.GitBranch'] = $source['branch'];
     $tmpdata['CodeSource'] = 'Git';
     $tmpdata['FunctionName'] = $function_name;
     $tmpdata['Handler'] = 'index.main_handler';
@@ -393,9 +416,11 @@ namespace:' . $_SERVER['namespace'] . '<br>
 <button onclick="location.href = location.href;">'.getconstStr('Refresh').'</button>';
 }
 
-function OnekeyUpate()
+function OnekeyUpate($auth = 'qkqpttgf', $project = 'OneManager-php', $branch = 'master')
 {
-    return json_decode(updateProgram($_SERVER['function_name'], $_SERVER['Region'], $_SERVER['namespace'], getConfig('SecretId'), getConfig('SecretKey')), true)['Response'];
+    $source['url'] = 'https://github.com/' . $auth . '/' . $project;
+    $source['branch'] = $branch;
+    return json_decode(updateProgram($_SERVER['function_name'], $_SERVER['Region'], $_SERVER['namespace'], getConfig('SecretId'), getConfig('SecretKey'), $source), true)['Response'];
 }
 
 function setConfigResponse($response)

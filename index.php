@@ -1,13 +1,14 @@
 <?php
+error_reporting(E_ALL ^ E_NOTICE);
 include 'vendor/autoload.php';
 include 'conststr.php';
-include 'function/common.php';
+include 'common.php';
 
 //echo '<pre>'. json_encode($_SERVER, JSON_PRETTY_PRINT).'</pre>';
 if (isset($_SERVER['USER'])&&$_SERVER['USER']==='qcloud') {
-    include 'function/scf.php';
+    include 'platform/scf.php';
 } elseif (isset($_SERVER['HEROKU_APP_DIR'])&&$_SERVER['HEROKU_APP_DIR']==='/app') {
-    include 'function/heroku.php';
+    include 'platform/heroku.php';
     $path = getpath();
     //echo 'path:'. $path;
     $_GET = getGET();
@@ -20,7 +21,7 @@ if (isset($_SERVER['USER'])&&$_SERVER['USER']==='qcloud') {
     http_response_code($re['statusCode']);
     echo $re['body'];
 } else {
-    include 'function/normal.php';
+    include 'platform/normal.php';
     $path = getpath();
     //echo 'path:'. $path;
     $_GET = getGET();
